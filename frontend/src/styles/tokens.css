@@ -1,0 +1,91 @@
+@import "@fontsource/newsreader/400.css";
+@import "@fontsource/newsreader/500.css";
+@import "@fontsource/atkinson-hyperlegible-next/400.css";
+@import "@fontsource/atkinson-hyperlegible-next/700.css";
+@import "@fontsource/spline-sans-mono/400.css";
+
+:root {
+  color-scheme: light;
+  --color-navy: #353a7c;
+  --color-vermilion: #e2332f;
+  --color-marigold: #f9d20a;
+  --color-paper: #faf7f0;
+  --color-ink: #15162b;
+  --color-hairline: #e2ddd0;
+  --color-muted: #666579;
+  --color-safe: #286548;
+  --color-watch: #9a5b00;
+  --color-surface: #fffefa;
+  --color-soft: #f0ece2;
+  --color-white: #ffffff;
+  --font-heading: "Newsreader", Georgia, serif;
+  --font-body: "Atkinson Hyperlegible Next", Arial, sans-serif;
+  --font-mono: "Spline Sans Mono", monospace;
+  --text-meta: 12px;
+  --text-compact: 14px;
+  --text-body: 16px;
+  --text-section: 20px;
+  --text-page: 28px;
+  --text-figure: 36px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-control: 4px;
+  --border-hairline: 1px solid var(--color-hairline);
+  --content-max: 1200px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: 1.45;
+  font-synthesis: none;
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-navy);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-marigold);
+  color: var(--color-ink);
+}
