@@ -1,7 +1,16 @@
+import json
+import os
+import uuid
+import zipfile
+from datetime import UTC, datetime
+from io import BytesIO
+from pathlib import Path
+
 from fastapi import HTTPException
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models import (
     AcademicYear,
     AppUser,
@@ -9,6 +18,7 @@ from app.models import (
     Assignment,
     AssignmentSubmission,
     AttendanceRecord,
+    AuditLog,
     ClassSession,
     Course,
     Department,
@@ -20,6 +30,7 @@ from app.models import (
 )
 from app.schemas.student import (
     AssignmentResponse,
+    AssignmentSubmissionResponse,
     AttendanceSessionResponse,
     AttendanceSummaryResponse,
     AttendanceTotals,
@@ -292,3 +303,173 @@ def get_assignments(db: Session, user: AppUser, department_id: int) -> list[Assi
         )
         for assignment, course, submission in rows
     ]
+
+
+MAX_SUBMISSION_BYTES = 5 * 1024 * 1024
+ALLOWED_SUBMISSION_EXTENSIONS = {".pdf", ".zip", ".docx"}
+
+
+def _validate_submission_file(filename: str, content: bytes) -> str:
+    extension = Path(filename).suffix.casefold()
+    if extension not in ALLOWED_SUBMISSION_EXTENSIONS:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "unsupported_file_type", "message": "Upload a PDF, ZIP, or DOCX file."},
+        )
+    if not content:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "empty_file", "message": "The uploaded file is empty."},
+        )
+    if len(content) > MAX_SUBMISSION_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={"code": "file_too_large", "message": "The file must be 5 MB or smaller."},
+        )
+    if extension == ".pdf" and not content.startswith(b"%PDF-"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_file_content",
+                "message": "The file does not contain a valid PDF.",
+            },
+        )
+    if extension in {".zip", ".docx"}:
+        try:
+            archive = zipfile.ZipFile(BytesIO(content))
+            entries = archive.infolist()
+            expanded_size = sum(entry.file_size for entry in entries)
+            valid_archive = (
+                len(entries) <= 2000
+                and expanded_size <= 25 * 1024 * 1024
+                and archive.testzip() is None
+            )
+            names = set(archive.namelist())
+            archive.close()
+        except (OSError, zipfile.BadZipFile, RuntimeError):
+            valid_archive = False
+            names = set()
+        if not valid_archive or (
+            extension == ".docx"
+            and not {
+                "[Content_Types].xml",
+                "word/document.xml",
+            }.issubset(names)
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "invalid_file_content",
+                    "message": "The file is not a valid ZIP or DOCX archive.",
+                },
+            )
+    return extension[1:]
+
+
+def submit_assignment(
+    db: Session,
+    user: AppUser,
+    department_id: int,
+    assignment_id: int,
+    filename: str,
+    content: bytes,
+) -> AssignmentSubmissionResponse:
+    extension = _validate_submission_file(filename, content)
+    student = _student(db, user.id, department_id)
+    assignment = db.scalar(
+        select(Assignment)
+        .join(Course, Course.id == Assignment.course_id)
+        .where(
+            Assignment.id == assignment_id,
+            Assignment.section_id == student.section_id,
+            Course.department_id == department_id,
+        )
+    )
+    if assignment is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "assignment_not_found", "message": "Assignment not found."},
+        )
+
+    storage_root = Path(settings.upload_dir).expanduser().resolve()
+    web_root = Path(__file__).resolve().parents[3] / "frontend" / "public"
+    if storage_root == web_root or web_root in storage_root.parents:
+        raise RuntimeError("UPLOAD_DIR must be outside the frontend web root.")
+    storage_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+    file_key = uuid.uuid4().hex
+    destination = storage_root / f"{file_key}.{extension}"
+    temporary = storage_root / f".{file_key}.part"
+    previous = db.scalar(
+        select(AssignmentSubmission).where(
+            AssignmentSubmission.assignment_id == assignment.id,
+            AssignmentSubmission.student_id == student.id,
+        )
+    )
+    old_path = Path(previous.file_path) if previous is not None else None
+    submitted_at = datetime.now(UTC)
+    before = None
+    if previous is not None:
+        before = {
+            "status": previous.status,
+            "submitted_at": previous.submitted_at.isoformat(),
+        }
+
+    try:
+        file_descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(file_descriptor, "wb") as output:
+            output.write(content)
+        temporary.replace(destination)
+        if previous is None:
+            previous = AssignmentSubmission(
+                assignment_id=assignment.id,
+                student_id=student.id,
+                file_path=str(destination),
+                submitted_at=submitted_at,
+                status="submitted",
+            )
+            db.add(previous)
+        else:
+            previous.file_path = str(destination)
+            previous.submitted_at = submitted_at
+            previous.status = "submitted"
+        db.flush()
+        db.add(
+            AuditLog(
+                actor_user_id=user.id,
+                action="create" if before is None else "replace",
+                entity_type="assignment_submission",
+                entity_id=previous.id,
+                before_json=json.dumps(before, sort_keys=True) if before else None,
+                after_json=json.dumps(
+                    {
+                        "status": "submitted",
+                        "submitted_at": submitted_at.isoformat(),
+                        "file_type": extension,
+                    },
+                    sort_keys=True,
+                ),
+                created_at=submitted_at,
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        temporary.unlink(missing_ok=True)
+        destination.unlink(missing_ok=True)
+        raise
+
+    if (
+        old_path is not None
+        and old_path.resolve().is_relative_to(storage_root)
+        and old_path.resolve() != destination
+    ):
+        try:
+            old_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return AssignmentSubmissionResponse(
+        assignment_id=assignment.id,
+        status="submitted",
+        submitted_at=submitted_at,
+    )

@@ -83,3 +83,9 @@ class AssignmentResponse(BaseModel):
     max_marks: Decimal
     status: str
     submitted_at: datetime | None
+
+
+class AssignmentSubmissionResponse(BaseModel):
+    assignment_id: int
+    status: str
+    submitted_at: datetime

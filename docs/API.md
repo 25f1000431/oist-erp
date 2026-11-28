@@ -20,6 +20,7 @@ Errors use `{"error":{"code":string,"message":string,"details":object|null}}`. L
 | Method | Path | Summary | Parameters | Request | Responses |
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/me/assignments` | List assignments for the authenticated student's section | — | — | `200` · array of AssignmentResponse |
+| `POST` | `/api/v1/me/assignments/{assignment_id}/submission` | Submit or replace the authenticated student's assignment file | `assignment_id` (path) | Body_submit_assignment_api_v1_me_assignments__assignment_id__submission_post | `200`, `422` · AssignmentSubmissionResponse |
 | `GET` | `/api/v1/me/attendance/courses/{course_id}/sessions` | List updated attendance sessions for one of the student's courses | `course_id` (path) | — | `200`, `422` · array of AttendanceSessionResponse |
 | `GET` | `/api/v1/me/attendance/summary` | Get overall and course-wise attendance totals | — | — | `200` · AttendanceSummaryResponse |
 | `GET` | `/api/v1/me/fees` | List the authenticated student's fee records | — | — | `200` · array of FeeRecordResponse |
@@ -60,6 +61,14 @@ Errors use `{"error":{"code":string,"message":string,"details":object|null}}`. L
 | `max_marks` | string | yes |  |
 | `status` | string | yes |  |
 | `submitted_at` | string | null | yes |  |
+
+### `AssignmentSubmissionResponse`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `assignment_id` | integer | yes |  |
+| `status` | string | yes |  |
+| `submitted_at` | string | yes |  |
 
 ### `AttendanceDefaultPayload`
 
@@ -118,6 +127,12 @@ Errors use `{"error":{"code":string,"message":string,"details":object|null}}`. L
 | `band` | string | yes |  |
 | `shortage` | boolean | yes |  |
 | `formula` | string | yes |  |
+
+### `Body_submit_assignment_api_v1_me_assignments__assignment_id__submission_post`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `file` | string | yes | PDF, ZIP, or DOCX file; maximum size 5 MB. |
 
 ### `CourseAttendanceSummary`
 

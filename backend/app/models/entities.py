@@ -174,6 +174,7 @@ class Assignment(Base):
 
 class AssignmentSubmission(Base):
     __tablename__ = "assignment_submission"
+    __table_args__ = (UniqueConstraint("assignment_id", "student_id"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     assignment_id: Mapped[int] = mapped_column(ForeignKey("assignment.id"), index=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), index=True)

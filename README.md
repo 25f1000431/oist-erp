@@ -43,7 +43,7 @@ uv run ruff check backend
 
 ## Browser smoke test
 
-The Playwright test starts an isolated SQLite API with fake sample students and a Vite server, then checks that a teacher can create a session, mark two students absent, save attendance, and see the changed course total after logging in as one of those students. It uses `SEED_DEFAULT_PASSWORD` from the project `.env`; it does not use or reset the normal development database.
+The Playwright test starts an isolated SQLite API with fake sample students and a Vite server, then checks that a teacher can create a session, mark two students absent, save attendance, and see the changed course total after logging in as one of those students. It also uploads a fake PDF for a pending assignment and verifies the new submission status. It uses `SEED_DEFAULT_PASSWORD` from the project `.env`; it does not use or reset the normal development database.
 
 Install the browser once, then run the test:
 
@@ -62,6 +62,8 @@ Regenerate `docs/API.md` from the FastAPI schema after changing routes or respon
 PYTHONPATH=backend uv run python scripts/export_api_docs.py
 ```
 
+The API and recommended attendance-agent call sequence are documented in [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md).
+
 ## Current milestone
 
-M0–M5 provide the project scaffold, database schema, bearer authentication, role checks, synthetic seed data, student read APIs, teacher attendance workflows, student and teacher frontend, browser smoke test, and generated API reference. The student timetable and assignment upload endpoint are not available yet.
+M0–M5 provide the project scaffold, database schema, bearer authentication, role checks, synthetic seed data, student read APIs, teacher attendance workflows, student and teacher frontend, browser smoke test, and generated API reference. Student assignment uploads support PDF, ZIP, and DOCX files up to 5 MB. A published student timetable is not available because the current data model has no timetable source.

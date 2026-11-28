@@ -798,6 +798,34 @@ h3,
   margin-top: 0;
 }
 
+.assignment-upload {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.assignment-upload-button {
+  position: relative;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.assignment-upload-button input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.upload-error {
+  color: var(--color-vermilion);
+  font-size: 13px;
+}
+
 .loading-block {
   display: flex;
   align-items: center;

@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowUpRight, CalendarBlank, WarningCircle } from "@phosphor-icons/react";
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type ChangeEvent } from "react";
 import {
   api,
   formatDate,
@@ -304,6 +305,27 @@ export function StudentAssignments() {
 }
 
 function AssignmentCard({ item }: { item: Assignment }) {
+  const queryClient = useQueryClient();
+  const [fileError, setFileError] = useState<string | null>(null);
+  const submission = useMutation({
+    mutationFn: (file: File) => api.submitAssignment(item.id, file),
+    onSuccess: () => {
+      setFileError(null);
+      queryClient.invalidateQueries({ queryKey: ["assignments"] });
+    },
+  });
+  const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    submission.reset();
+    if (file.size > 5 * 1024 * 1024) {
+      setFileError("The file must be 5 MB or smaller.");
+      return;
+    }
+    setFileError(null);
+    submission.mutate(file);
+  };
   return (
     <Panel className="assignment-card">
       <div className="assignment-main">
@@ -317,7 +339,22 @@ function AssignmentCard({ item }: { item: Assignment }) {
         <span className="mono">Max {item.max_marks}</span>
       </div>
       {item.status !== "pending" && item.submitted_at && <div className="submitted-note">Submitted {formatDate(item.submitted_at)}</div>}
-      {item.status === "pending" && <div className="quiet-note">Online submission is not enabled in this demo.</div>}
+      {item.status === "pending" && (
+        <div className="assignment-upload">
+          <label className="button button-primary assignment-upload-button">
+            {submission.isPending ? "Uploading…" : "Upload file"}
+            <input
+              type="file"
+              accept=".pdf,.zip,.docx,application/pdf,application/zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={chooseFile}
+              disabled={submission.isPending}
+              aria-label={`Upload ${item.title}`}
+            />
+          </label>
+          <span className="quiet-note">PDF, ZIP, or DOCX · up to 5 MB</span>
+          {(fileError || submission.error) && <span className="upload-error">{fileError || submission.error?.message}</span>}
+        </div>
+      )}
     </Panel>
   );
 }

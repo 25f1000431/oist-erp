@@ -1,6 +1,9 @@
 import csv
+import stat
+from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -11,7 +14,10 @@ from app.core.database import Base
 from app.models import (
     AcademicYear,
     AppUser,
+    Assignment,
+    AssignmentSubmission,
     AttendanceRecord,
+    AuditLog,
     ClassSession,
     Course,
     Department,
@@ -32,6 +38,7 @@ from app.services.student import (
     get_fees,
     get_profile,
     get_results,
+    submit_assignment,
 )
 
 
@@ -200,6 +207,92 @@ def test_attendance_percent_band_and_scheduled_exclusion():
     assert is_shortage(74.99)
     assert not is_shortage(75)
     assert percentage(0, 0) == 0
+
+
+def test_assignment_submission_is_scoped_stored_outside_web_root_and_audited(
+    seeded_database, monkeypatch, tmp_path
+):
+    session_factory, _, _ = seeded_database
+    upload_root = tmp_path / "private-uploads"
+    monkeypatch.setattr("app.services.student.settings.upload_dir", str(upload_root))
+    with session_factory() as db:
+        student = db.scalar(select(Student).order_by(Student.id))
+        user = db.get(AppUser, student.user_id)
+        own_assignment = db.scalar(
+            select(Assignment).where(Assignment.section_id == student.section_id)
+        )
+        other_assignment = db.scalar(
+            select(Assignment).where(Assignment.section_id != student.section_id)
+        )
+        audit_count = db.scalar(select(func.count()).select_from(AuditLog))
+
+        first = submit_assignment(
+            db, user, student.department_id, own_assignment.id, "work.PDF", b"%PDF-1.7\ncontent"
+        )
+        record = db.scalar(
+            select(AssignmentSubmission).where(
+                AssignmentSubmission.assignment_id == own_assignment.id,
+                AssignmentSubmission.student_id == student.id,
+            )
+        )
+        stored_path = Path(record.file_path)
+        assert first.assignment_id == own_assignment.id
+        assert record.status == "submitted"
+        assert stored_path.exists()
+        assert stored_path.read_bytes() == b"%PDF-1.7\ncontent"
+        assert stat.S_IMODE(stored_path.stat().st_mode) == 0o600
+        assert upload_root in stored_path.parents
+        assert "frontend/public" not in str(stored_path)
+        assert db.scalar(select(func.count()).select_from(AuditLog)) == audit_count + 1
+
+        second = submit_assignment(
+            db, user, student.department_id, own_assignment.id, "replacement.pdf", b"%PDF-1.7\nnew"
+        )
+        assert second.status == "submitted"
+        assert not stored_path.exists()
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(AssignmentSubmission)
+                .where(
+                    AssignmentSubmission.assignment_id == own_assignment.id,
+                    AssignmentSubmission.student_id == student.id,
+                )
+            )
+            == 1
+        )
+        assert db.scalar(select(func.count()).select_from(AuditLog)) == audit_count + 2
+
+        with pytest.raises(HTTPException) as exc:
+            submit_assignment(
+                db,
+                user,
+                student.department_id,
+                other_assignment.id,
+                "work.pdf",
+                b"%PDF-1.7\ncontent",
+            )
+        assert exc.value.status_code == 404
+        with pytest.raises(HTTPException) as exc:
+            submit_assignment(
+                db,
+                user,
+                student.department_id,
+                own_assignment.id,
+                "work.exe",
+                b"not an allowed file",
+            )
+        assert exc.value.status_code == 422
+        with pytest.raises(HTTPException) as exc:
+            submit_assignment(
+                db,
+                user,
+                student.department_id,
+                own_assignment.id,
+                "work.pdf",
+                b"%PDF-" + b"x" * (5 * 1024 * 1024),
+            )
+        assert exc.value.status_code == 413
 
 
 def test_attendance_service_matches_hand_computed_updated_sessions_only():

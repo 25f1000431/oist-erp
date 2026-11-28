@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_department_id, require_roles
@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.models import AppUser
 from app.schemas.student import (
     AssignmentResponse,
+    AssignmentSubmissionResponse,
     AttendanceSessionResponse,
     AttendanceSummaryResponse,
     FeeRecordResponse,
@@ -95,3 +96,32 @@ def read_assignments(
     db: Session = Depends(get_db),
 ) -> list[AssignmentResponse]:
     return student_service.get_assignments(db, user, department_id)
+
+
+@router.post(
+    "/assignments/{assignment_id}/submission",
+    response_model=AssignmentSubmissionResponse,
+    summary="Submit or replace the authenticated student's assignment file",
+)
+async def submit_assignment(
+    assignment_id: int,
+    file: UploadFile = File(description="PDF, ZIP, or DOCX file; maximum size 5 MB."),
+    user: AppUser = Depends(student_role),
+    department_id: int = Depends(get_department_id),
+    db: Session = Depends(get_db),
+) -> AssignmentSubmissionResponse:
+    content = await file.read(student_service.MAX_SUBMISSION_BYTES + 1)
+    await file.close()
+    if len(content) > student_service.MAX_SUBMISSION_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={"code": "file_too_large", "message": "The file must be 5 MB or smaller."},
+        )
+    return student_service.submit_assignment(
+        db,
+        user,
+        department_id,
+        assignment_id,
+        file.filename or "",
+        content,
+    )

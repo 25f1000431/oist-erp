@@ -15,7 +15,7 @@ function todayInKolkata(): string {
 }
 
 function randomTimeRange(): [string, string] {
-  const startMinute = Math.floor(Math.random() * (23 * 60));
+  const startMinute = Math.floor(Math.random() * (24 * 60 - 45));
   const endMinute = startMinute + 45;
   const format = (value: number) =>
     `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
@@ -104,4 +104,24 @@ test("teacher records two absences and the student sees updated attendance", asy
   await expect(courseRow).toContainText(
     `${targetCourse.present} / ${targetCourse.total + 1} present`,
   );
+
+  const assignmentsResponse = await request.get(`${apiBase}/me/assignments`, {
+    headers: { Authorization: `Bearer ${studentAuth.access_token}` },
+  });
+  expect(assignmentsResponse.ok()).toBeTruthy();
+  const assignments = await assignmentsResponse.json();
+  const pendingAssignment = assignments.find(
+    (assignment: { status: string }) => assignment.status === "pending",
+  );
+  expect(pendingAssignment, "The seeded student should have a pending assignment").toBeTruthy();
+  await page.goto("/student/assignments");
+  const assignmentCard = page.locator(".assignment-card").filter({
+    has: page.getByRole("heading", { name: pendingAssignment.title, exact: true }),
+  });
+  await assignmentCard.locator('input[type="file"]').setInputFiles({
+    name: "practice.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.7\nMock assignment submission"),
+  });
+  await expect(assignmentCard.locator(".assignment-status")).toContainText("submitted");
 });

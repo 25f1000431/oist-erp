@@ -96,6 +96,12 @@ export interface Assignment {
   submitted_at: string | null;
 }
 
+export interface AssignmentSubmission {
+  assignment_id: number;
+  status: string;
+  submitted_at: string;
+}
+
 export interface TeacherClass {
   teaching_assignment_id: number;
   course: CourseIdentity & { kind: string };
@@ -213,6 +219,14 @@ export const api = {
   fees: () => request<FeeRecord[]>("/me/fees"),
   results: () => request<AssessmentResult[]>("/me/results"),
   assignments: () => request<Assignment[]>("/me/assignments"),
+  submitAssignment: (assignmentId: number, file: File) => {
+    const body = new FormData();
+    body.set("file", file);
+    return request<AssignmentSubmission>(`/me/assignments/${assignmentId}/submission`, {
+      method: "POST",
+      body,
+    });
+  },
   teacherClasses: () => request<TeacherClass[]>("/teacher/classes"),
   teacherSessions: (filters: {
     teaching_assignment_id?: number;

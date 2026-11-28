@@ -9,6 +9,7 @@ const repoRoot = resolve(frontendDir, "..");
 const envPath = resolve(repoRoot, ".env");
 const databaseFile = resolve(tmpdir(), `oist-erp-playwright-${process.pid}.sqlite`);
 const resultsDir = resolve(tmpdir(), `oist-erp-playwright-results-${process.pid}`);
+const uploadsDir = resolve(tmpdir(), `oist-erp-playwright-uploads-${process.pid}`);
 
 if (!process.env.SEED_DEFAULT_PASSWORD) {
   try {
@@ -25,11 +26,17 @@ if (!process.env.SEED_DEFAULT_PASSWORD) {
   throw new Error("Set SEED_DEFAULT_PASSWORD in the project .env before running Playwright.");
 }
 
+Object.assign(process.env, {
+  E2E_SQLITE_FILE: databaseFile,
+  E2E_UPLOADS_DIR: uploadsDir,
+});
+
 const env = {
   ...process.env,
   DATABASE_URL: `sqlite:///${databaseFile}`,
   E2E_SQLITE_FILE: databaseFile,
-  E2E_RESULTS_DIR: resultsDir,
+  E2E_UPLOADS_DIR: uploadsDir,
+  UPLOAD_DIR: uploadsDir,
   E2E_API_PORT: "18000",
   FRONTEND_ORIGINS: "http://127.0.0.1:15173",
   VITE_API_BASE_URL: "http://127.0.0.1:18000/api/v1",
